@@ -9,10 +9,23 @@ let draws = 0;
 let gamePaused = false;
 let gameEnded = false;
 let gameState = "WAITING"; // WAITING, COUNTDOWN, BATTLE, RESULT
+let gameMode = "普通"; // 普通, 挑戰
+let userMoveHistory = []; // 用於挑戰模式分析
+
 let countdownValue = 3;
 let countdownTimer = 0;
 let roundsPlayed = 0;
 const TOTAL_ROUNDS_LIMIT = 3;
+
+// 手勢對應 Emoji 映射表
+const GESTURE_EMOJI = {
+  "Rock": "✊",
+  "Scissors": "✌️",
+  "Paper": "🖐️",
+  "Robot": "🤖",
+  "---": "❔",
+  "手勢消失": "❌"
+};
 
 let computerGesture = "---";
 let winnerResult = "等待中...";
@@ -118,9 +131,9 @@ function draw() {
         }
         // 繪製關節
         for (let i = 0; i < landmarks.length; i++) {
-          fill(0, 255, 0);
+          fill(255, 0, 0); // 關節點改為紅色較醒目
           noStroke();
-          ellipse(landmarks[i].x * videoW, landmarks[i].y * videoH, 5, 5);
+          ellipse(landmarks[i].x * videoW, landmarks[i].y * videoH, 6, 6);
         }
       }
     }
@@ -211,6 +224,24 @@ function processGame(landmarks) {
   }
 }
 
+/**
+ * 挑戰模式核心 AI 邏輯
+ */
+function getSmartMove() {
+  if (gameMode === "普通" || userMoveHistory.length < 2) {
+    return random(["Rock", "Scissors", "Paper"]);
+  }
+  
+  // 頻率分析：找出玩家最常出的拳
+  let counts = { "Rock": 0, "Scissors": 0, "Paper": 0 };
+  userMoveHistory.forEach(m => counts[m]++);
+  let favorite = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+  
+  // 電腦出對應能贏玩家最愛出之拳
+  const counters = { "Rock": "Paper", "Paper": "Scissors", "Scissors": "Rock" };
+  return counters[favorite] || random(["Rock", "Scissors", "Paper"]);
+}
+
 function getFingerStates(landmarks) {
   // 拇指伸直判斷 (與小指根部的距離)
   let thumbUp = dist(landmarks[4].x, landmarks[4].y, landmarks[17].x, landmarks[17].y) > 
@@ -227,11 +258,11 @@ function getFingerStates(landmarks) {
 function analyzeGesture(landmarks) {
   const f = getFingerStates(landmarks);
   if (f.index && f.middle && f.ring && f.pinky) {
-    return "布 (Paper)";
+    return "Paper";
   } else if (f.index && f.middle && !f.ring && !f.pinky) {
-    return "剪刀 (Scissors)";
+    return "Scissors";
   } else if (!f.thumb && !f.index && !f.middle && !f.ring && !f.pinky) {
-    return "石頭 (Rock)";
+    return "Rock";
   } else {
     return "未知";
   }
@@ -240,9 +271,9 @@ function analyzeGesture(landmarks) {
 function decideWinner(user, computer) {
   if (user === computer) return "平手";
   if (
-    (user === "石頭 (Rock)" && computer === "剪刀 (Scissors)") ||
-    (user === "剪刀 (Scissors)" && computer === "布 (Paper)") ||
-    (user === "布 (Paper)" && computer === "石頭 (Rock)")
+    (user === "Rock" && computer === "Scissors") ||
+    (user === "Scissors" && computer === "Paper") ||
+    (user === "Paper" && computer === "Rock")
   ) {
     return "使用者";
   } else {
@@ -253,33 +284,38 @@ function decideWinner(user, computer) {
 function drawUI() {
   // 左上角計分板
   push();
-  fill(255, 230);
+  fill(255, 245, 255, 200);
   noStroke();
-  rect(10, 10, 220, 170, 10);
+  rect(20, 20, 240, 180, 15);
+  drawingContext.shadowBlur = 10;
+  drawingContext.shadowColor = 'rgba(0,0,0,0.1)';
   fill(0);
-  textSize(18);
+  textSize(20);
+  textStyle(BOLD);
   textAlign(LEFT, TOP);
-  text("【累計戰績】", 25, 25);
-  text(`使用者勝: ${userWins}`, 25, 55);
-  text(`電腦勝　: ${computerWins}`, 25, 85);
-  text(`平手局數: ${draws}`, 25, 115);
-  text(`目前局數: ${roundsPlayed}/${TOTAL_ROUNDS_LIMIT}`, 25, 145);
+  text("📊 累計戰績", 40, 40);
+  textSize(18);
+  textStyle(NORMAL);
+  text(`👤 使用者勝: ${userWins}`, 40, 75);
+  text(`🤖 電腦勝　: ${computerWins}`, 40, 105);
+  text(`🤝 平手局數: ${draws}`, 40, 135);
+  text(`🎮 目前局數: ${roundsPlayed}/${TOTAL_ROUNDS_LIMIT}`, 40, 165);
   pop();
 
-  // 右上角狀態
+  // 右上角模式與結果
   push();
-  fill(255, 230);
+  fill(gameMode === "挑戰" ? '#ff4d6d' : 255, 200);
   noStroke();
-  rect(width - 210, 10, 200, 100, 10);
-  fill(0);
-  textAlign(RIGHT, TOP);
-  text("【對戰結果】", width - 25, 25);
-  if (winnerResult === "使用者") fill(0, 150, 0);
-  else if (winnerResult === "電腦") fill(200, 0, 0);
-  else fill(0);
-  text(`勝者: ${winnerResult}`, width - 25, 55);
-  fill(0);
-  text(`電腦出: ${computerGesture}`, width - 25, 85);
+  rect(width - 240, 20, 220, 110, 15);
+  fill(gameMode === "挑戰" ? 255 : 0);
+  textAlign(RIGHT);
+  textStyle(BOLD);
+  text(`模式: ${gameMode}`, width - 40, 50);
+  textStyle(NORMAL);
+  if (gameState === "RESULT") {
+    text(`勝者: ${winnerResult}`, width - 40, 80);
+    text(`電腦出: ${GESTURE_EMOJI[computerGesture] || computerGesture}`, width - 40, 110);
+  }
   pop();
 
   // 畫面中央提示
@@ -288,7 +324,7 @@ function drawUI() {
     fill(255);
     textAlign(CENTER, CENTER);
     textSize(40);
-    text(`遊戲結束！\n總戰績\n使用者 ${userWins} : 電腦 ${computerWins}\n(平手: ${draws})`, width/2, height/2);
+    text(`🎬 遊戲結束！\n\n【 總結算 】\n使用者 ${userWins} ： 電腦 ${computerWins}\n( 平手: ${draws} )`, width/2, height/2);
   } else if (roundsPlayed >= TOTAL_ROUNDS_LIMIT && gameState === "WAITING") {
     fill(0);
     rectMode(CENTER);
@@ -297,16 +333,36 @@ function drawUI() {
     fill(0);
     textAlign(CENTER, CENTER);
     textSize(22);
-    text("已達 3 局！\n繼續：比出『大拇指+食指+小指』\n結束：比出『中指+無名指+小指 (OK)』", width/2, height * 0.85);
+    text("已達 3 局！\n繼續：比出『蜘蛛人手勢』 | 結束：比出『OK 手勢』", width/2, height * 0.85);
   } else if (gameState === "COUNTDOWN") {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
-    textSize(100);
+    textSize(150);
     text(countdownValue, width/2, height/2);
   } else if (gameState === "BATTLE") {
-    fill(0, 0, 255);
     textAlign(CENTER, CENTER);
-    textSize(80);
-    text("出拳！", width/2, height/2);
+    textSize(120);
+    text("🔥", width/2, height/2);
+  } else if (gameState === "RESULT") {
+    // 顯示對戰圖示
+    let userG = analyzeGesture(detections.multiHandLandmarks ? detections.multiHandLandmarks[0] : []);
+    push();
+    textAlign(CENTER, CENTER);
+    textSize(140);
+    // 使用者手勢 (左)
+    text(GESTURE_EMOJI[userG] || "❓", width/2 - 180, height/2);
+    // VS (中)
+    textSize(40);
+    fill(0);
+    text("VS", width/2, height/2);
+    // 電腦手勢 (右)
+    textSize(140);
+    text(GESTURE_EMOJI[computerGesture] || "🤖", width/2 + 180, height/2);
+    pop();
+  } else if (gameState === "WAITING" && roundsPlayed === 0) {
+    fill(0, 100);
+    textAlign(CENTER);
+    textSize(20);
+    text("點擊下方選擇模式： 左側 [普通] | 右側 [挑戰]", width/2, height * 0.9);
   }
 }
