@@ -3,11 +3,10 @@ let hands;
 let detections = {};
 
 function setup() {
-  createCanvas(640, 480);
+  let canvas = createCanvas(640, 480);
   
-  // Create a video element but don't start the p5 capture stream
-  // This prevents the "Double Request" conflict with MediaPipe
-  capture = createElement('video');
+  // 建立原始的 video 元素，但不啟動 p5 的 capture 以免與 MediaPipe 衝突
+  capture = createElement('video').attribute('playsinline', '');
   capture.size(640, 480);
   capture.hide();
 
@@ -41,12 +40,18 @@ function setup() {
         width: 640,
         height: 480
       });
-      camera.start();
+      
+      camera.start().catch(err => {
+        console.error("攝像頭啟動失敗: ", err);
+        if (location.protocol === 'file:') {
+          alert("MediaPipe 需要在本地伺服器環境運行。請使用 VS Code 的 Live Server 擴充功能開啟。");
+        }
+      });
     } else {
       console.error("MediaPipe Camera utility not found.");
     }
   } else {
-    console.error("MediaPipe Hands library not found. Ensure you are running on a server and connected to the internet.");
+    console.error("MediaPipe Hands library not found. 請檢查網路連線。");
   }
 }
 
@@ -55,8 +60,25 @@ function onResults(results) {
 }
 
 function draw() {
-  // Draw the webcam feed
-  image(capture, 0, 0, width, height);
+  // 進入鏡像模式 (水平翻轉)
+  push();
+  translate(width, 0);
+  scale(-1, 1);
+
+  // 檢查攝影機是否準備好
+  if (capture.elt.readyState >= 2) {
+    // 繪製攝影機畫面
+    image(capture, 0, 0, width, height);
+  } else {
+    background(0);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    // 修正文字，使其不被鏡像翻轉
+    push();
+    scale(-1, 1);
+    text("正在啟動攝影機...", -width/2, height/2);
+    pop();
+  }
 
   // Draw landmarks if hands are detected
   if (detections.multiHandLandmarks) {
@@ -67,8 +89,9 @@ function draw() {
         
         fill(0, 255, 0);
         noStroke();
-        ellipse(x, y, 10, 10);
+        ellipse(x, y, 8, 8);
       }
     }
   }
+  pop(); // 離開鏡像模式
 }
