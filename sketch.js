@@ -3,6 +3,10 @@ let hands;
 let detections = {};
 let cameraError = false;
 
+let computerGesture = "---";
+let winnerResult = "等待中...";
+let lastChoiceTime = 0;
+
 // 手部關節連接定義（根據 MediaPipe 21 個關鍵點索引）
 const HAND_CONNECTIONS = [
   [0, 1], [1, 2], [2, 3], [3, 4], // 拇指
@@ -103,7 +107,6 @@ function draw() {
   // Draw landmarks if hands are detected
   if (detections.multiHandLandmarks) {
     for (const landmarks of detections.multiHandLandmarks) {
-      let gesture = analyzeGesture(landmarks);
       
       // 1. 繪製骨架連線
       stroke(0, 255, 0); // 綠色線條
@@ -126,35 +129,59 @@ function draw() {
         noStroke();
         ellipse(x, y, 8, 8);
       }
-
-      // 3. 顯示手勢文字 (需處理鏡像文字翻轉)
-      push();
-      scale(-1, 1);
-      fill(255, 255, 0);
-      textSize(32);
-      textAlign(CENTER);
-      // 取得手掌中心位置作為文字標籤位置
-      let labelX = landmarks[0].x * width;
-      let labelY = landmarks[0].y * height;
-      text(gesture, -labelX, labelY + 40);
-      pop();
     }
   }
   pop(); // 離開鏡像模式
+
+  // --- 遊戲邏輯與 UI 顯示 (不包含在鏡像模式內，以免文字反轉) ---
+  if (detections.multiHandLandmarks && detections.multiHandLandmarks.length > 0) {
+    let userGesture = analyzeGesture(detections.multiHandLandmarks[0]);
+    
+    // 每 2 秒讓電腦重新出拳一次，保持遊戲動態
+    if (millis() - lastChoiceTime > 2000) {
+      const options = ["石頭 (Rock)", "剪刀 (Scissors)", "布 (Paper)"];
+      computerGesture = options[Math.floor(random(options.length))];
+      lastChoiceTime = millis();
+    }
+
+    // 判定勝負
+    winnerResult = decideWinner(userGesture, computerGesture);
+
+    // 繪製左上角資訊
+    textAlign(LEFT, TOP);
+    noStroke();
+    fill(0, 150); // 半透明背景背景
+    rect(5, 5, 220, 90, 5);
+    
+    fill(255);
+    textSize(22);
+    text(`使用者: ${userGesture}`, 15, 15);
+    text(`電腦　: ${computerGesture}`, 15, 50);
+
+    // 繪製右上角勝者
+    textAlign(RIGHT, TOP);
+    fill(0, 150);
+    rect(width - 205, 5, 200, 50, 5);
+    
+    fill(255, 255, 0);
+    textSize(24);
+    text(`勝者: ${winnerResult}`, width - 15, 15);
+  } else {
+    // 未偵測到手部時重置
+    winnerResult = "請伸出手掌";
+  }
 }
 
 /**
  * 判斷手勢：石頭、剪刀、布
  */
 function analyzeGesture(landmarks) {
-  // 判斷手指是否伸直 (指尖 y 座標小於第二關節 y 座標)
-  // MediaPipe y 座標是 0~1，0 在頂部
-  let indexUp = landmarks[8].y < landmarks[6].y;
-  let middleUp = landmarks[12].y < landmarks[10].y;
-  let ringUp = landmarks[16].y < landmarks[14].y;
-  let pinkyUp = landmarks[20].y < landmarks[18].y;
+  // 判斷手指是否伸直 (指尖 y 座標小於第二關節 y 座標則為伸直)
+  const indexUp = landmarks[8].y < landmarks[6].y;
+  const middleUp = landmarks[12].y < landmarks[10].y;
+  const ringUp = landmarks[16].y < landmarks[14].y;
+  const pinkyUp = landmarks[20].y < landmarks[18].y;
 
-  // 根據手指狀態判斷手勢
   if (indexUp && middleUp && ringUp && pinkyUp) {
     return "布 (Paper)";
   } else if (indexUp && middleUp && !ringUp && !pinkyUp) {
@@ -162,6 +189,24 @@ function analyzeGesture(landmarks) {
   } else if (!indexUp && !middleUp && !ringUp && !pinkyUp) {
     return "石頭 (Rock)";
   } else {
-    return "---";
+    return "未知";
+  }
+}
+
+/**
+ * 判斷勝負邏輯
+ */
+function decideWinner(user, computer) {
+  if (user === "未知") return "等待出拳...";
+  if (user === computer) return "平手";
+
+  if (
+    (user === "石頭 (Rock)" && computer === "剪刀 (Scissors)") ||
+    (user === "剪刀 (Scissors)" && computer === "布 (Paper)") ||
+    (user === "布 (Paper)" && computer === "石頭 (Rock)")
+  ) {
+    return "使用者";
+  } else {
+    return "電腦";
   }
 }
