@@ -103,6 +103,7 @@ function draw() {
   // Draw landmarks if hands are detected
   if (detections.multiHandLandmarks) {
     for (const landmarks of detections.multiHandLandmarks) {
+      let gesture = analyzeGesture(landmarks);
       
       // 1. 繪製骨架連線
       stroke(0, 255, 0); // 綠色線條
@@ -125,7 +126,42 @@ function draw() {
         noStroke();
         ellipse(x, y, 8, 8);
       }
+
+      // 3. 顯示手勢文字 (需處理鏡像文字翻轉)
+      push();
+      scale(-1, 1);
+      fill(255, 255, 0);
+      textSize(32);
+      textAlign(CENTER);
+      // 取得手掌中心位置作為文字標籤位置
+      let labelX = landmarks[0].x * width;
+      let labelY = landmarks[0].y * height;
+      text(gesture, -labelX, labelY + 40);
+      pop();
     }
   }
   pop(); // 離開鏡像模式
+}
+
+/**
+ * 判斷手勢：石頭、剪刀、布
+ */
+function analyzeGesture(landmarks) {
+  // 判斷手指是否伸直 (指尖 y 座標小於第二關節 y 座標)
+  // MediaPipe y 座標是 0~1，0 在頂部
+  let indexUp = landmarks[8].y < landmarks[6].y;
+  let middleUp = landmarks[12].y < landmarks[10].y;
+  let ringUp = landmarks[16].y < landmarks[14].y;
+  let pinkyUp = landmarks[20].y < landmarks[18].y;
+
+  // 根據手指狀態判斷手勢
+  if (indexUp && middleUp && ringUp && pinkyUp) {
+    return "布 (Paper)";
+  } else if (indexUp && middleUp && !ringUp && !pinkyUp) {
+    return "剪刀 (Scissors)";
+  } else if (!indexUp && !middleUp && !ringUp && !pinkyUp) {
+    return "石頭 (Rock)";
+  } else {
+    return "---";
+  }
 }
