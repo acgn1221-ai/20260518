@@ -5,10 +5,9 @@ let detections = {};
 function setup() {
   createCanvas(640, 480);
   
-  // Initialize p5.js video capture
-  capture = createCapture(VIDEO, (stream) => {
-    console.log("Webcam access granted.");
-  });
+  // Create a video element but don't start the p5 capture stream
+  // This prevents the "Double Request" conflict with MediaPipe
+  capture = createElement('video');
   capture.size(640, 480);
   capture.hide();
 
