@@ -1,6 +1,7 @@
 let capture;
 let hands;
 let detections = {};
+let cameraError = false;
 
 function setup() {
   let canvas = createCanvas(640, 480);
@@ -43,6 +44,7 @@ function setup() {
       
       camera.start().catch(err => {
         console.error("攝像頭啟動失敗: ", err);
+        cameraError = true;
         if (location.protocol === 'file:') {
           alert("MediaPipe 需要在本地伺服器環境運行。請使用 VS Code 的 Live Server 擴充功能開啟。");
         }
@@ -69,6 +71,14 @@ function draw() {
   if (capture.elt.readyState >= 2) {
     // 繪製攝影機畫面
     image(capture, 0, 0, width, height);
+  } else if (cameraError) {
+    background(50);
+    fill(255, 100, 100);
+    textAlign(CENTER, CENTER);
+    push();
+    scale(-1, 1);
+    text("無法找到相機裝置\n請檢查權限或伺服器環境", -width/2, height/2);
+    pop();
   } else {
     background(0);
     fill(255);
