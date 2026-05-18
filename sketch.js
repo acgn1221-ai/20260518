@@ -3,6 +3,12 @@ let hands;
 let detections = {};
 let cameraError = false;
 
+let userWins = 0;
+let computerWins = 0;
+let draws = 0;
+let gamePaused = false;
+let gameEnded = false;
+
 let computerGesture = "---";
 let winnerResult = "等待中...";
 let lastChoiceTime = 0;
@@ -18,7 +24,7 @@ const HAND_CONNECTIONS = [
 ];
 
 function setup() {
-  let canvas = createCanvas(640, 480);
+  createCanvas(windowWidth, windowHeight);
   
   // 建立原始的 video 元素，但不啟動 p5 的 capture 以免與 MediaPipe 衝突
   capture = createElement('video').attribute('playsinline', '');
@@ -37,8 +43,8 @@ function setup() {
     hands.setOptions({
       maxNumHands: 2,
       modelComplexity: 1,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
     });
 
     hands.onResults(onResults);
@@ -75,131 +81,125 @@ function onResults(results) {
   detections = results;
 }
 
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
 function draw() {
-  // 進入鏡像模式 (水平翻轉)
-  push();
-  translate(width, 0);
-  scale(-1, 1);
+  background('#e7c6ff');
 
-  // 檢查攝影機是否準備好
+  let videoW = width * 0.6;
+  let videoH = height * 0.6;
+  let xOff = (width - videoW) / 2;
+  let yOff = (height - videoH) / 2;
+
   if (capture.elt.readyState >= 2) {
-    // 繪製攝影機畫面
-    image(capture, 0, 0, width, height);
-  } else if (cameraError) {
-    background(50);
-    fill(255, 100, 100);
-    textAlign(CENTER, CENTER);
+    // --- 繪製攝影機影像與手部關節 (僅在準備好時進行鏡像) ---
     push();
+    translate(xOff + videoW, yOff);
     scale(-1, 1);
-    text("無法找到相機裝置\n請檢查權限或伺服器環境", -width/2, height/2);
+    image(capture, 0, 0, videoW, videoH);
+    
+    if (detections.multiHandLandmarks && !gameEnded) {
+      for (const landmarks of detections.multiHandLandmarks) {
+        // 繪製骨架
+        stroke(0, 255, 0);
+        strokeWeight(2);
+        for (const connection of HAND_CONNECTIONS) {
+          const start = landmarks[connection[0]];
+          const end = landmarks[connection[1]];
+          line(start.x * videoW, start.y * videoH, end.x * videoW, end.y * videoH);
+        }
+        // 繪製關節
+        for (let i = 0; i < landmarks.length; i++) {
+          fill(0, 255, 0);
+          noStroke();
+          ellipse(landmarks[i].x * videoW, landmarks[i].y * videoH, 5, 5);
+        }
+      }
+    }
     pop();
   } else {
-    background(0);
-    fill(255);
+    fill(0);
     textAlign(CENTER, CENTER);
-    // 修正文字，使其不被鏡像翻轉
-    push();
-    scale(-1, 1);
-    text("正在啟動攝影機...", -width/2, height/2);
-    pop();
-  }
-
-  // Draw landmarks if hands are detected
-  if (detections.multiHandLandmarks) {
-    for (const landmarks of detections.multiHandLandmarks) {
-      
-      // 1. 繪製骨架連線
-      stroke(0, 255, 0); // 綠色線條
-      strokeWeight(2);
-      for (const connection of HAND_CONNECTIONS) {
-        const start = landmarks[connection[0]];
-        const end = landmarks[connection[1]];
-        line(
-          start.x * width, start.y * height,
-          end.x * width, end.y * height
-        );
-      }
-
-      // 2. 繪製關節點
-      for (let i = 0; i < landmarks.length; i++) {
-        let x = landmarks[i].x * width;
-        let y = landmarks[i].y * height;
-        
-        fill(0, 255, 0);
-        noStroke();
-        ellipse(x, y, 8, 8);
-      }
-    }
-  }
-  pop(); // 離開鏡像模式
-
-  // --- 遊戲邏輯與 UI 顯示 (不包含在鏡像模式內，以免文字反轉) ---
-  if (detections.multiHandLandmarks && detections.multiHandLandmarks.length > 0) {
-    let userGesture = analyzeGesture(detections.multiHandLandmarks[0]);
-    
-    // 每 2 秒讓電腦重新出拳一次，保持遊戲動態
-    if (millis() - lastChoiceTime > 2000) {
-      const options = ["石頭 (Rock)", "剪刀 (Scissors)", "布 (Paper)"];
-      computerGesture = options[Math.floor(random(options.length))];
-      lastChoiceTime = millis();
-    }
-
-    // 判定勝負
-    winnerResult = decideWinner(userGesture, computerGesture);
-
-    // 繪製左上角資訊
-    textAlign(LEFT, TOP);
-    noStroke();
-    fill(0, 150); // 半透明背景背景
-    rect(5, 5, 220, 90, 5);
-    
-    fill(255);
-    textSize(22);
-    text(`使用者: ${userGesture}`, 15, 15);
-    text(`電腦　: ${computerGesture}`, 15, 50);
-
-    // 繪製右上角勝者
-    textAlign(RIGHT, TOP);
-    fill(0, 150);
-    rect(width - 205, 5, 200, 50, 5);
-    
-    fill(255, 255, 0);
     textSize(24);
-    text(`勝者: ${winnerResult}`, width - 15, 15);
-  } else {
-    // 未偵測到手部時重置
-    winnerResult = "請伸出手掌";
+    text(cameraError ? "相機啟動失敗" : "正在等待相機...", width / 2, height / 2);
   }
+
+  // --- 遊戲邏輯控制 ---
+  if (detections.multiHandLandmarks && detections.multiHandLandmarks.length > 0) {
+    processGame(detections.multiHandLandmarks[0]);
+  }
+
+  drawUI();
 }
 
 /**
- * 判斷手勢：石頭、剪刀、布
+ * 處理遊戲流程
  */
-function analyzeGesture(landmarks) {
-  // 判斷手指是否伸直 (指尖 y 座標小於第二關節 y 座標則為伸直)
-  const indexUp = landmarks[8].y < landmarks[6].y;
-  const middleUp = landmarks[12].y < landmarks[10].y;
-  const ringUp = landmarks[16].y < landmarks[14].y;
-  const pinkyUp = landmarks[20].y < landmarks[18].y;
+function processGame(landmarks) {
+  if (gameEnded) return;
 
-  if (indexUp && middleUp && ringUp && pinkyUp) {
+  const finger = getFingerStates(landmarks);
+
+  // 結束手勢：中、無名、小指舉起 (9-20) -> OK 手勢
+  if (!finger.index && finger.middle && finger.ring && finger.pinky) {
+    gameEnded = true;
+    return;
+  }
+
+  // 繼續手勢：大拇指、食指、小指舉起 (1-8, 17-20)
+  if (gamePaused && finger.thumb && finger.index && !finger.middle && !finger.ring && finger.pinky) {
+    gamePaused = false;
+    lastChoiceTime = millis();
+    winnerResult = "等待出拳...";
+  }
+
+  // 自動出拳計時 (每 2 秒一次)
+  if (!gamePaused && millis() - lastChoiceTime > 2000) {
+    let userGesture = analyzeGesture(landmarks);
+    if (userGesture !== "未知") {
+      const options = ["石頭 (Rock)", "剪刀 (Scissors)", "布 (Paper)"];
+      computerGesture = options[Math.floor(random(options.length))];
+      winnerResult = decideWinner(userGesture, computerGesture);
+      
+      if (winnerResult === "使用者") userWins++;
+      else if (winnerResult === "電腦") computerWins++;
+      else if (winnerResult === "平手") draws++;
+      
+      gamePaused = true; // 判定完畢，進入暫停等待「繼續手勢」
+    }
+  }
+}
+
+function getFingerStates(landmarks) {
+  // 拇指伸直判斷 (與小指根部的距離)
+  let thumbUp = dist(landmarks[4].x, landmarks[4].y, landmarks[17].x, landmarks[17].y) > 
+                dist(landmarks[3].x, landmarks[3].y, landmarks[17].x, landmarks[17].y);
+  return {
+    thumb: thumbUp,
+    index: landmarks[8].y < landmarks[6].y,
+    middle: landmarks[12].y < landmarks[10].y,
+    ring: landmarks[16].y < landmarks[14].y,
+    pinky: landmarks[20].y < landmarks[18].y
+  };
+}
+
+function analyzeGesture(landmarks) {
+  const f = getFingerStates(landmarks);
+  if (f.index && f.middle && f.ring && f.pinky) {
     return "布 (Paper)";
-  } else if (indexUp && middleUp && !ringUp && !pinkyUp) {
+  } else if (f.index && f.middle && !f.ring && !f.pinky) {
     return "剪刀 (Scissors)";
-  } else if (!indexUp && !middleUp && !ringUp && !pinkyUp) {
+  } else if (!f.thumb && !f.index && !f.middle && !f.ring && !f.pinky) {
     return "石頭 (Rock)";
   } else {
     return "未知";
   }
 }
 
-/**
- * 判斷勝負邏輯
- */
 function decideWinner(user, computer) {
-  if (user === "未知") return "等待出拳...";
   if (user === computer) return "平手";
-
   if (
     (user === "石頭 (Rock)" && computer === "剪刀 (Scissors)") ||
     (user === "剪刀 (Scissors)" && computer === "布 (Paper)") ||
@@ -208,5 +208,49 @@ function decideWinner(user, computer) {
     return "使用者";
   } else {
     return "電腦";
+  }
+}
+
+function drawUI() {
+  // 左上角計分板
+  push();
+  fill(255, 230);
+  noStroke();
+  rect(10, 10, 200, 140, 10);
+  fill(0);
+  textSize(18);
+  textAlign(LEFT, TOP);
+  text("【計分板】", 25, 25);
+  text(`贏 (Wins): ${userWins}`, 25, 55);
+  text(`輸 (Losses): ${computerWins}`, 25, 85);
+  text(`平 (Draws): ${draws}`, 25, 115);
+  pop();
+
+  // 右上角狀態
+  push();
+  fill(255, 230);
+  noStroke();
+  rect(width - 210, 10, 200, 100, 10);
+  fill(0);
+  textAlign(RIGHT, TOP);
+  text("【對戰結果】", width - 25, 25);
+  fill(userWins > computerWins ? 'green' : 'red');
+  text(`勝者: ${winnerResult}`, width - 25, 55);
+  fill(0);
+  text(`電腦出: ${computerGesture}`, width - 25, 85);
+  pop();
+
+  // 畫面中央提示
+  if (gameEnded) {
+    background(0, 200);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(40);
+    text(`最終戰績\n贏: ${userWins} | 輸: ${computerWins} | 平: ${draws}`, width/2, height/2);
+  } else if (gamePaused) {
+    fill(0);
+    textAlign(CENTER, BOTTOM);
+    textSize(20);
+    text("請比出『繼續手勢』(拇指+食指+小指) 開啟下一局", width/2, height - 30);
   }
 }
