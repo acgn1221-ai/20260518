@@ -8,6 +8,11 @@ let computerWins = 0;
 let draws = 0;
 let gamePaused = false;
 let gameEnded = false;
+let gameState = "WAITING"; // WAITING, COUNTDOWN, BATTLE, RESULT
+let countdownValue = 3;
+let countdownTimer = 0;
+let roundsPlayed = 0;
+const TOTAL_ROUNDS_LIMIT = 3;
 
 let computerGesture = "---";
 let winnerResult = "等待中...";
@@ -129,6 +134,11 @@ function draw() {
   // --- 遊戲邏輯控制 ---
   if (detections.multiHandLandmarks && detections.multiHandLandmarks.length > 0) {
     processGame(detections.multiHandLandmarks[0]);
+  } else if (gameState === "BATTLE") {
+    // 如果在出拳瞬間手不見了
+    winnerResult = "手勢消失";
+    gameState = "RESULT";
+    lastChoiceTime = millis();
   }
 
   drawUI();
@@ -141,23 +151,43 @@ function processGame(landmarks) {
   if (gameEnded) return;
 
   const finger = getFingerStates(landmarks);
+  let userGesture = analyzeGesture(landmarks);
 
-  // 結束手勢：中、無名、小指舉起 (9-20) -> OK 手勢
-  if (!finger.index && finger.middle && finger.ring && finger.pinky) {
-    gameEnded = true;
+  // 檢查是否需要判斷「繼續/結束」 (當局數達到 3 局且在等待狀態)
+  if (roundsPlayed >= TOTAL_ROUNDS_LIMIT && gameState === "WAITING") {
+    // 結束手勢：中(9-12)、無名(13-16)、小指(17-20)舉起 -> OK 手勢
+    if (!finger.thumb && !finger.index && finger.middle && finger.ring && finger.pinky) {
+      gameEnded = true;
+      return;
+    }
+    // 繼續手勢：大拇指(1-4)、食指(5-8)、小指(17-20)舉起
+    if (finger.thumb && finger.index && !finger.middle && !finger.ring && finger.pinky) {
+      roundsPlayed = 0; // 重置局數，但保留總分（或依需求重置分數）
+      gameState = "COUNTDOWN";
+      countdownValue = 3;
+      countdownTimer = millis();
+    }
     return;
   }
 
-  // 繼續手勢：大拇指、食指、小指舉起 (1-8, 17-20)
-  if (gamePaused && finger.thumb && finger.index && !finger.middle && !finger.ring && finger.pinky) {
-    gamePaused = false;
-    lastChoiceTime = millis();
-    winnerResult = "等待出拳...";
+  // 正常的遊戲循環
+  if (gameState === "WAITING" && roundsPlayed < TOTAL_ROUNDS_LIMIT) {
+    gameState = "COUNTDOWN";
+    countdownValue = 3;
+    countdownTimer = millis();
   }
 
-  // 自動出拳計時 (每 2 秒一次)
-  if (!gamePaused && millis() - lastChoiceTime > 2000) {
-    let userGesture = analyzeGesture(landmarks);
+  if (gameState === "COUNTDOWN") {
+    let elapsed = millis() - countdownTimer;
+    if (elapsed < 1000) countdownValue = 3;
+    else if (elapsed < 2000) countdownValue = 2;
+    else if (elapsed < 3000) countdownValue = 1;
+    else {
+      gameState = "BATTLE";
+    }
+  }
+
+  if (gameState === "BATTLE") {
     if (userGesture !== "未知") {
       const options = ["石頭 (Rock)", "剪刀 (Scissors)", "布 (Paper)"];
       computerGesture = options[Math.floor(random(options.length))];
@@ -167,7 +197,15 @@ function processGame(landmarks) {
       else if (winnerResult === "電腦") computerWins++;
       else if (winnerResult === "平手") draws++;
       
-      gamePaused = true; // 判定完畢，進入暫停等待「繼續手勢」
+      roundsPlayed++;
+      gameState = "RESULT";
+      lastChoiceTime = millis();
+    }
+  }
+
+  if (gameState === "RESULT") {
+    if (millis() - lastChoiceTime > 2000) {
+      gameState = "WAITING";
     }
   }
 }
@@ -216,14 +254,15 @@ function drawUI() {
   push();
   fill(255, 230);
   noStroke();
-  rect(10, 10, 200, 140, 10);
+  rect(10, 10, 220, 170, 10);
   fill(0);
   textSize(18);
   textAlign(LEFT, TOP);
-  text("【計分板】", 25, 25);
-  text(`贏 (Wins): ${userWins}`, 25, 55);
-  text(`輸 (Losses): ${computerWins}`, 25, 85);
-  text(`平 (Draws): ${draws}`, 25, 115);
+  text("【累計戰績】", 25, 25);
+  text(`使用者勝: ${userWins}`, 25, 55);
+  text(`電腦勝　: ${computerWins}`, 25, 85);
+  text(`平手局數: ${draws}`, 25, 115);
+  text(`目前局數: ${roundsPlayed}/${TOTAL_ROUNDS_LIMIT}`, 25, 145);
   pop();
 
   // 右上角狀態
@@ -234,7 +273,9 @@ function drawUI() {
   fill(0);
   textAlign(RIGHT, TOP);
   text("【對戰結果】", width - 25, 25);
-  fill(userWins > computerWins ? 'green' : 'red');
+  if (winnerResult === "使用者") fill(0, 150, 0);
+  else if (winnerResult === "電腦") fill(200, 0, 0);
+  else fill(0);
   text(`勝者: ${winnerResult}`, width - 25, 55);
   fill(0);
   text(`電腦出: ${computerGesture}`, width - 25, 85);
@@ -246,11 +287,25 @@ function drawUI() {
     fill(255);
     textAlign(CENTER, CENTER);
     textSize(40);
-    text(`最終戰績\n贏: ${userWins} | 輸: ${computerWins} | 平: ${draws}`, width/2, height/2);
-  } else if (gamePaused) {
+    text(`遊戲結束！\n總戰績\n使用者 ${userWins} : 電腦 ${computerWins}\n(平手: ${draws})`, width/2, height/2);
+  } else if (roundsPlayed >= TOTAL_ROUNDS_LIMIT && gameState === "WAITING") {
     fill(0);
-    textAlign(CENTER, BOTTOM);
-    textSize(20);
-    text("請比出『繼續手勢』(拇指+食指+小指) 開啟下一局", width/2, height - 30);
+    rectMode(CENTER);
+    fill(255, 230);
+    rect(width/2, height * 0.85, 600, 100, 10);
+    fill(0);
+    textAlign(CENTER, CENTER);
+    textSize(22);
+    text("已達 3 局！\n繼續：比出『大拇指+食指+小指』\n結束：比出『中指+無名指+小指 (OK)』", width/2, height * 0.85);
+  } else if (gameState === "COUNTDOWN") {
+    fill(255, 0, 0);
+    textAlign(CENTER, CENTER);
+    textSize(100);
+    text(countdownValue, width/2, height/2);
+  } else if (gameState === "BATTLE") {
+    fill(0, 0, 255);
+    textAlign(CENTER, CENTER);
+    textSize(80);
+    text("出拳！", width/2, height/2);
   }
 }
