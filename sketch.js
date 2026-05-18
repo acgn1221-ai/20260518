@@ -29,7 +29,7 @@ const HAND_CONNECTIONS = [
 ];
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  createCanvas(windowWidth, windowHeight); // 全螢幕畫布
   
   // 建立原始的 video 元素，但不啟動 p5 的 capture 以免與 MediaPipe 衝突
   capture = createElement('video').attribute('playsinline', '');
@@ -91,23 +91,24 @@ function windowResized() {
 }
 
 function draw() {
-  background('#e7c6ff');
+  background('#e7c6ff'); // 設定背景顏色
 
-  let videoW = width * 0.6;
+  // 計算 60% 的影像寬高與置中偏移量
+  let videoW = width * 0.6; 
   let videoH = height * 0.6;
-  let xOff = (width - videoW) / 2;
-  let yOff = (height - videoH) / 2;
+  let xOff = (width - videoW) / 2; // 水平置中
+  let yOff = (height - videoH) / 2; // 垂直置中
 
   if (capture.elt.readyState >= 2) {
-    // --- 繪製攝影機影像與手部關節 (僅在準備好時進行鏡像) ---
+    // --- 繪製置中且縮放的攝影機影像與手部關節 ---
     push();
-    translate(xOff + videoW, yOff);
-    scale(-1, 1);
+    translate(xOff + videoW, yOff); // 移動到顯示區域右側準備水平翻轉
+    scale(-1, 1); // 鏡像處理
     image(capture, 0, 0, videoW, videoH);
     
     if (detections.multiHandLandmarks && !gameEnded) {
       for (const landmarks of detections.multiHandLandmarks) {
-        // 繪製骨架
+        // 繪製骨架 (座標需乘以縮放後的 videoW/H)
         stroke(0, 255, 0);
         strokeWeight(2);
         for (const connection of HAND_CONNECTIONS) {
