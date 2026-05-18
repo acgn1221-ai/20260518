@@ -3,6 +3,16 @@ let hands;
 let detections = {};
 let cameraError = false;
 
+// 手部關節連接定義（根據 MediaPipe 21 個關鍵點索引）
+const HAND_CONNECTIONS = [
+  [0, 1], [1, 2], [2, 3], [3, 4], // 拇指
+  [0, 5], [5, 6], [6, 7], [7, 8], // 食指
+  [0, 9], [9, 10], [10, 11], [11, 12], // 中指
+  [0, 13], [13, 14], [14, 15], [15, 16], // 無名指
+  [0, 17], [17, 18], [18, 19], [19, 20], // 小指
+  [5, 9], [9, 13], [13, 17] // 掌心連線
+];
+
 function setup() {
   let canvas = createCanvas(640, 480);
   
@@ -93,6 +103,20 @@ function draw() {
   // Draw landmarks if hands are detected
   if (detections.multiHandLandmarks) {
     for (const landmarks of detections.multiHandLandmarks) {
+      
+      // 1. 繪製骨架連線
+      stroke(0, 255, 0); // 綠色線條
+      strokeWeight(2);
+      for (const connection of HAND_CONNECTIONS) {
+        const start = landmarks[connection[0]];
+        const end = landmarks[connection[1]];
+        line(
+          start.x * width, start.y * height,
+          end.x * width, end.y * height
+        );
+      }
+
+      // 2. 繪製關節點
       for (let i = 0; i < landmarks.length; i++) {
         let x = landmarks[i].x * width;
         let y = landmarks[i].y * height;
