@@ -131,9 +131,9 @@ function draw() {
         }
         // 繪製關節
         for (let i = 0; i < landmarks.length; i++) {
-          fill(0, 255, 0);
+          fill(255, 0, 0); // 改用紅色關節點增加對比
           noStroke();
-          ellipse(landmarks[i].x * videoW, landmarks[i].y * videoH, 5, 5);
+          ellipse(landmarks[i].x * videoW, landmarks[i].y * videoH, 6, 6);
         }
       }
     }
@@ -253,9 +253,9 @@ function analyzeGesture(landmarks) {
 function decideWinner(user, computer) {
   if (user === computer) return "平手";
   if (
-    (user === "石頭 (Rock)" && computer === "剪刀 (Scissors)") ||
-    (user === "剪刀 (Scissors)" && computer === "布 (Paper)") ||
-    (user === "布 (Paper)" && computer === "石頭 (Rock)")
+    (user === "Rock" && computer === "Scissors") ||
+    (user === "Scissors" && computer === "Paper") ||
+    (user === "Paper" && computer === "Rock")
   ) {
     return "使用者";
   } else {
@@ -266,33 +266,35 @@ function decideWinner(user, computer) {
 function drawUI() {
   // 左上角計分板
   push();
-  fill(255, 230);
+  fill(255, 245, 255, 220);
   noStroke();
-  rect(10, 10, 220, 170, 10);
+  rect(20, 20, 240, 180, 15);
+  drawingContext.shadowBlur = 10;
+  drawingContext.shadowColor = 'rgba(0,0,0,0.1)';
   fill(0);
-  textSize(18);
+  textSize(20);
+  textStyle(BOLD);
   textAlign(LEFT, TOP);
-  text("【累計戰績】", 25, 25);
-  text(`使用者勝: ${userWins}`, 25, 55);
-  text(`電腦勝　: ${computerWins}`, 25, 85);
-  text(`平手局數: ${draws}`, 25, 115);
-  text(`目前局數: ${roundsPlayed}/${TOTAL_ROUNDS_LIMIT}`, 25, 145);
+  text("📊 累計戰績", 40, 45);
+  textSize(18);
+  textStyle(NORMAL);
+  text(`👤 使用者勝: ${userWins}`, 40, 75);
+  text(`🤖 電腦勝　: ${computerWins}`, 40, 105);
+  text(`🤝 平手局數: ${draws}`, 40, 135);
+  text(`🎮 局數: ${roundsPlayed}/${TOTAL_ROUNDS_LIMIT}`, 40, 165);
   pop();
 
   // 右上角狀態
   push();
-  fill(255, 230);
+  fill(gameMode === "挑戰" ? '#ff4d6d' : 255, 220);
   noStroke();
-  rect(width - 210, 10, 200, 100, 10);
-  fill(0);
-  textAlign(RIGHT, TOP);
-  text("【對戰結果】", width - 25, 25);
-  if (winnerResult === "使用者") fill(0, 150, 0);
-  else if (winnerResult === "電腦") fill(200, 0, 0);
-  else fill(0);
-  text(`勝者: ${winnerResult}`, width - 25, 55);
-  fill(0);
-  text(`電腦出: ${computerGesture}`, width - 25, 85);
+  rect(width - 240, 20, 220, 80, 15);
+  fill(gameMode === "挑戰" ? 255 : 0);
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  text("🏆 勝者", width - 130, 45);
+  textSize(22);
+  text(winnerResult, width - 130, 75);
   pop();
 
   // 畫面中央提示
@@ -301,25 +303,40 @@ function drawUI() {
     fill(255);
     textAlign(CENTER, CENTER);
     textSize(40);
-    text(`遊戲結束！\n總戰績\n使用者 ${userWins} : 電腦 ${computerWins}\n(平手: ${draws})`, width/2, height/2);
-  } else if (roundsPlayed >= TOTAL_ROUNDS_LIMIT && gameState === "WAITING") {
+    text(`🎬 遊戲結束！\n\n【 總結算 】\n使用者 ${userWins} : 電腦 ${computerWins}\n(平手: ${draws})`, width/2, height/2);
+  } else if (gameState === "MODE_SELECT") {
     fill(0);
-    rectMode(CENTER);
-    fill(255, 230);
-    rect(width/2, height * 0.85, 600, 100, 10);
+    textAlign(CENTER, CENTER);
+    textSize(28);
+    text("請比出手勢選擇模式\n\n👍 讚：普通模式\n👎 倒讚：挑戰模式", width/2, height * 0.85);
+  } else if (roundsPlayed >= TOTAL_ROUNDS_LIMIT && gameState === "WAITING") {
     fill(0);
     textAlign(CENTER, CENTER);
     textSize(22);
-    text("已達 3 局！\n繼續：比出『大拇指+食指+小指』\n結束：比出『中指+無名指+小指 (OK)』", width/2, height * 0.85);
+    text("已達 3 局！\n繼續：比出『蜘蛛人手勢』\n結束：比出『OK 手勢』", width/2, height * 0.85);
   } else if (gameState === "COUNTDOWN") {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
-    textSize(100);
+    textSize(150);
     text(countdownValue, width/2, height/2);
   } else if (gameState === "BATTLE") {
-    fill(0, 0, 255);
     textAlign(CENTER, CENTER);
-    textSize(80);
-    text("出拳！", width/2, height/2);
+    textSize(120);
+    text("🔥", width/2, height/2);
+  } else if (gameState === "RESULT") {
+    let userG = analyzeGesture(detections.multiHandLandmarks ? detections.multiHandLandmarks[0] : {});
+    push();
+    textAlign(CENTER, CENTER);
+    textSize(140);
+    // 使用者 Emoji (左)
+    text(GESTURE_EMOJI[userG] || "❓", width/2 - 180, height/2);
+    // VS (中)
+    textSize(50);
+    fill(0);
+    text("VS", width/2, height/2);
+    // 電腦 Emoji (右)
+    textSize(140);
+    text(GESTURE_EMOJI[computerGesture] || "🤖", width/2 + 180, height/2);
+    pop();
   }
 }
